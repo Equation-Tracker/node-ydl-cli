@@ -1,0 +1,17 @@
+{
+  "name": "youtube-downloader-nodejs",
+  "version": "1.0.0",
+  "description": "YouTube video downloader with quality selection",
+  "main": "downloader.js",
+  "scripts": {
+    "start": "node downloader.js"
+  },
+  "dependencies": {
+    "chalk": "^4.1.2",
+    "cli-progress": "^3.12.0",
+    "fluent-ffmpeg": "^2.1.2",
+    "inquirer": "^8.2.6",
+    "uuid": "^9.0.1",
+    "ytdl-core": "npm:@distube/ytdl-core@^4.16.8"
+  }
+}
