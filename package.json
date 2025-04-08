@@ -1,5 +1,5 @@
 {
-  "name": "youtube-downloader-nodejs",
+  "name": "ydl-cli",
   "version": "1.0.0",
   "description": "YouTube video downloader with quality selection",
   "main": "index.js",
