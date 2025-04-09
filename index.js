@@ -1,12 +1,13 @@
-const ytdl = require("ytdl-core");
-const ffmpeg = require("fluent-ffmpeg");
-const chalk = require("chalk");
-const cliProgress = require("cli-progress");
-const inquirer = require("inquirer");
-const { v4: uuidv4 } = require("uuid");
-const fs = require("fs");
-const path = require("path");
-const os = require("os");
+import ytdl from "ytdl-core";
+import ffmpeg from "fluent-ffmpeg";
+import chalk from "chalk";
+import { SingleBar, Presets } from "cli-progress";
+import inquirer from "inquirer";
+import { v4 as uuidv4 } from "uuid";
+import { createWriteStream, mkdirSync, rmSync, existsSync } from "fs";
+import { join } from "path";
+import { homedir, tmpdir } from "os";
+import { fileURLToPath } from "url";
 const VIDEO_ITAGS = {
   299: "1080p60 (mp4/avc1)", 298: "720p60 (mp4/avc1)", 137: "1080p (mp4/avc1)", 136: "720p (mp4/avc1)",
   135: "480p (mp4/avc1)", 134: "360p (mp4/avc1)", 133: "240p (mp4/avc1)", 160: "144p (mp4/avc1)",
@@ -16,7 +17,7 @@ const VIDEO_ITAGS = {
 };
 const AUDIO_ITAGS = { 141: "256kbps (m4a/mp4a)", 251: "160kbps (webm/opus)", 140: "128kbps (m4a/mp4a)", 250: "70kbps (webm/opus)" };
 const MP3_BITRATES = { "320k": "320 kbps", "256k": "256 kbps", "192k": "192 kbps", "160k": "160 kbps", "128k": "128 kbps" };
-const getDefaultOutputPath = () => path.join(os.homedir(), "Downloads", "YouTube");
+const getDefaultOutputPath = () => join(homedir(), "Downloads", "YouTube");
 function formatSize(bytes) {
   const units = ["B", "KB", "MB", "GB"];
   let size = bytes;
@@ -43,14 +44,14 @@ function getBitrateChoices(sourceBitrate) {
 class ProgressBar {
   constructor(total) {
     const formattedTotal = formatSize(total);
-    this.bar = new cliProgress.SingleBar({
+    this.bar = new SingleBar({
       format: ` Downloading: |${chalk.cyan("{bar}")}| {percentage}% | {downloaded} / ${formattedTotal} | {speed}/s | ETA: {eta}`,
       barCompleteChar: "█",
       barIncompleteChar: "-",
       hideCursor: true,
       clearOnComplete: true,
       stopOnComplete: true,
-    }, cliProgress.Presets.shades_classic);
+    }, Presets.shades_classic);
     this.total = total;
     this.current = 0;
     this.startTime = Date.now();
@@ -131,18 +132,18 @@ function sanitizeFilename(filename) {
   return filename.replace(/[^a-z0-9\s-_.]/gi, "_");
 }
 async function downloadVideo(url, videoItag, audioItag, targetBitrate = null, outputPath = null) {
-  let tempDir = path.join(os.tmpdir(), `yt_download_${uuidv4()}`);
-  fs.mkdirSync(tempDir, { recursive: true });
+  let tempDir = join(tmpdir(), `yt_download_${uuidv4()}`);
+  mkdirSync(tempDir, { recursive: true });
   let error = null;
   try {
     outputPath = outputPath || getDefaultOutputPath();
-    fs.mkdirSync(outputPath, { recursive: true });
+    mkdirSync(outputPath, { recursive: true });
     const info = await getVideoInfo(url);
     console.log(`Downloading: ${info.title}`);
-    const videoPath = path.join(tempDir, `${uuidv4()}.mp4`);
+    const videoPath = join(tempDir, `${uuidv4()}.mp4`);
     const audioFormat = info.formats.find(f => f.itag === audioItag);
-    const audioPath = path.join(tempDir, `${uuidv4()}.${audioFormat.container}`);
-    const outputFile = path.join(outputPath, `${sanitizeFilename(info.title)}.mp4`);
+    const audioPath = join(tempDir, `${uuidv4()}.${audioFormat.container}`);
+    const outputFile = join(outputPath, `${sanitizeFilename(info.title)}.mp4`);
     const sourceBitrate = parseInt(audioFormat.audioBitrate);
     const requestedBitrate = targetBitrate ? parseInt(targetBitrate) : sourceBitrate;
     const needsUpscaling = requestedBitrate > sourceBitrate;
@@ -156,7 +157,7 @@ async function downloadVideo(url, videoItag, audioItag, targetBitrate = null, ou
         return;
       }
       const videoProgress = new ProgressBar(parseInt(format.contentLength));
-      const fileStream = fs.createWriteStream(videoPath);
+      const fileStream = createWriteStream(videoPath);
       videoStream.pipe(fileStream);
       videoStream.on("progress", (_, downloaded, total) => {
         videoProgress.update(downloaded);
@@ -179,7 +180,7 @@ async function downloadVideo(url, videoItag, audioItag, targetBitrate = null, ou
         return;
       }
       const audioProgress = new ProgressBar(parseInt(format.contentLength));
-      const fileStream = fs.createWriteStream(audioPath);
+      const fileStream = createWriteStream(audioPath);
       audioStream.pipe(fileStream);
       audioStream.on("progress", (_, downloaded, total) => {
         audioProgress.update(downloaded);
@@ -231,32 +232,32 @@ async function downloadVideo(url, videoItag, audioItag, targetBitrate = null, ou
     error = err;
     console.error(chalk.red("\nAn error occurred:"), err.message);
   } finally {
-    if (fs.existsSync(tempDir)) {
-      fs.rmSync(tempDir, { recursive: true, force: true });
+    if (existsSync(tempDir)) {
+      rmSync(tempDir, { recursive: true, force: true });
       console.log(chalk.yellow("Cleaned up temporary files"));
     }
     process.exit(error ? 1 : 0);
   }
 }
 async function downloadAudioOnly(url, audioItag = null, outputPath = null) {
-  let tempDir = path.join(os.tmpdir(), `yt_download_${uuidv4()}`);
-  fs.mkdirSync(tempDir, { recursive: true });
+  let tempDir = join(tmpdir(), `yt_download_${uuidv4()}`);
+  mkdirSync(tempDir, { recursive: true });
   let error = null;
   try {
     outputPath = outputPath || getDefaultOutputPath();
-    fs.mkdirSync(outputPath, { recursive: true });
+    mkdirSync(outputPath, { recursive: true });
     const info = await getVideoInfo(url);
     console.log(`Downloading: ${info.title}`);
     const bestAudio = info.availableAudioFormats[0];
     console.log(`\nFound best audio quality: ${bestAudio.quality}`);
-    const audioPath = path.join(tempDir, `${uuidv4()}.${info.formats.find(f => f.itag === bestAudio.itag).container}`);
+    const audioPath = join(tempDir, `${uuidv4()}.${info.formats.find(f => f.itag === bestAudio.itag).container}`);
     const { targetBitrate } = await inquirer.prompt([{
       type: "list",
       name: "targetBitrate",
       message: "Select MP3 output quality:",
       choices: getBitrateChoices(bestAudio.bitrate)
     }]);
-    const outputFile = path.join(outputPath, `${sanitizeFilename(info.title)}.mp3`);
+    const outputFile = join(outputPath, `${sanitizeFilename(info.title)}.mp3`);
     console.log(`\nDownloading audio...`);
     await new Promise((resolve, reject) => {
       const audioStream = ytdl(url, { quality: bestAudio.itag });
@@ -266,7 +267,7 @@ async function downloadAudioOnly(url, audioItag = null, outputPath = null) {
         return;
       }
       const audioProgress = new ProgressBar(parseInt(format.contentLength));
-      const fileStream = fs.createWriteStream(audioPath);
+      const fileStream = createWriteStream(audioPath);
       audioStream.pipe(fileStream);
       audioStream.on("progress", (_, downloaded, total) => {
         audioProgress.update(downloaded);
@@ -310,14 +311,14 @@ async function downloadAudioOnly(url, audioItag = null, outputPath = null) {
     error = err;
     console.error(chalk.red("\nAn error occurred:"), err.message);
   } finally {
-    if (fs.existsSync(tempDir)) {
-      fs.rmSync(tempDir, { recursive: true, force: true });
+    if (existsSync(tempDir)) {
+      rmSync(tempDir, { recursive: true, force: true });
       console.log(chalk.yellow("Cleaned up temporary files"));
     }
     process.exit(error ? 1 : 0);
   }
 }
-if (require.main === module) {
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
   inquirer.prompt([
     {
       type: "input",

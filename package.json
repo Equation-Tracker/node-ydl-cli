@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "YouTube video downloader with quality selection",
   "main": "index.js",
+  "type": "module",
   "scripts": {
     "start": "node index.js"
   },
